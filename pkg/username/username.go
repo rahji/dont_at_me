@@ -2,17 +2,16 @@ package username
 
 import (
 	"fmt"
-	"github.com/gzipchrist/dont_at_me/pkg/social"
-	"github.com/gzipchrist/dont_at_me/pkg/style"
 	"strings"
 	"sync"
+
+	"github.com/gzipchrist/dont_at_me/pkg/social"
 )
 
 func CheckAvailabilitySerial(username string) error {
-	for i := 0; i < len(social.Platforms); i++ {
-		status := social.Platforms[i].GetAvailability(username)
-		spacer := style.MaxCharWidth - len(social.PlatformStrings[social.Platforms[i]])
-		fmt.Printf("    %s%s%s\n", social.Platforms[i].String(), strings.Repeat(" ", spacer), status.String())
+	for _, p := range social.Platforms {
+		status := p.GetAvailability(username)
+		fmt.Printf("    %s%s%s\n", p, strings.Repeat(" ", p.Spacer()), status.String())
 	}
 
 	return nil
@@ -24,10 +23,10 @@ func CheckAvailabilityConcurrent(username string) {
 
 	for i := 0; i < len(social.Platforms); i++ {
 		wg.Add(1)
-		go func(platform social.Platform) {
+		go func(p social.Platform) {
 			defer wg.Done()
-			status := platform.GetAvailability(username)
-			results <- fmt.Sprintf("%s%s%s\n", platform.String(), strings.Repeat(" ", style.MaxCharWidth-len(social.PlatformStrings[platform])), status.String())
+			status := p.GetAvailability(username)
+			results <- fmt.Sprintf("%s %s%s (%s%s)\n", status, p, strings.Repeat(" ", p.Spacer()), p.URL, username)
 		}(social.Platforms[i])
 	}
 

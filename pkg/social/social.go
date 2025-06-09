@@ -2,57 +2,42 @@ package social
 
 import (
 	"context"
-	"github.com/gzipchrist/dont_at_me/pkg/style"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gzipchrist/dont_at_me/pkg/style"
 )
 
-type Platform int
-
-const (
-	Instagram Platform = iota + 1
-	TikTok
-	GitHub
-	Snapchat
-	Twitch
-	YouTube
-	Mastodon
-)
-
-var Platforms = []Platform{Instagram, TikTok, GitHub, Snapchat, Twitch, YouTube, Mastodon}
-
-var PlatformStrings = map[Platform]string{
-	Instagram: "Instagram",
-	TikTok:    "TikTok",
-	GitHub:    "GitHub",
-	Snapchat:  "Snapchat",
-	Twitch:    "Twitch",
-	YouTube:   "YouTube",
-	Mastodon:  "Mastodon",
+type Platform struct {
+	Name                string
+	URL                 string
+	Match               string
+	MatchMeansAvailable bool
 }
 
-var PlatformBaseUrls = map[Platform]string{
-	Instagram: "https://instagram.com/",
-	TikTok:    "https://us.tiktok.com/@",
-	GitHub:    "https://github.com/",
-	Snapchat:  "https://www.snapchat.com/add/",
-	Twitch:    "https://www.twitch.tv/",
-	YouTube:   "https://youtube.com/@",
-	Mastodon:  "https://mastodon.social/@",
+var Platforms = []Platform{
+	{"Instagram", "https://instagram.com/", "<title>Instagram</title>", true},
+	{"TikTok", "https://us.tiktok.com/@", "Watch the latest video from .", true},
+	{"GitHub", "https://github.com/", strconv.Itoa(http.StatusNotFound), true},
+	{"Snapchat", "https://www.snapchat.com/add/", "content=\"Not_Found\"", true},
+	{"Twitch", "https://www.twitch.tv/", "https://player.twitch.tv/?channel=", false},
+	{"YouTube", "https://youtube.com/@", strconv.Itoa(http.StatusNotFound), true},
+	{"Mastodon", "https://mastodon.social/@", "<title>The page you", true},
 }
 
 func (p Platform) String() string {
-	return PlatformStrings[p]
+	return p.Name
 }
 
 func (p Platform) BaseUrl() string {
-	return PlatformBaseUrls[p]
+	return p.URL
 }
 
 func (p Platform) Spacer() int {
-	return style.MaxCharWidth - len(p.String())
+	return style.MaxCharWidth - len(p.Name)
 }
 
 type Status int
@@ -64,9 +49,9 @@ const (
 )
 
 var StatusMessages = map[Status]string{
-	Unavailable: style.Red.Colorize("✖️"),
-	Unknown:     style.Red.Colorize("?"),
-	Available:   style.Green.Colorize("✔️"),
+	Unavailable: "❌",
+	Unknown:     "❓",
+	Available:   "✅",
 }
 
 func (s Status) String() string {
@@ -91,11 +76,11 @@ func (p Platform) GetAvailability(username string) Status {
 
 	defer res.Body.Close()
 
-	if res.StatusCode == http.StatusNotFound {
-		switch p {
-		case GitHub, YouTube:
+	if p.Match == strconv.Itoa(res.StatusCode) {
+		if p.MatchMeansAvailable {
 			return Available
 		}
+		return Unavailable
 	}
 
 	body, err := io.ReadAll(res.Body)
@@ -103,32 +88,12 @@ func (p Platform) GetAvailability(username string) Status {
 		return Unknown
 	}
 
-	switch p {
-	case Instagram:
-		if strings.Contains(string(body), "<title>Instagram</title>") {
+	if strings.Contains(string(body), p.Match) {
+		if p.MatchMeansAvailable {
 			return Available
 		}
-	case TikTok:
-		if strings.Contains(string(body), "Watch the latest video from .") {
-			return Available
-		}
-	case Snapchat:
-		if strings.Contains(string(body), "content=\"Not_Found\"") {
-			return Available
-		}
-	case Twitch:
-		if strings.Contains(string(body), "content='Twitch is the world") {
-			return Available
-		}
-	case YouTube:
-		if strings.Contains(string(body), "<title>404 Not Found</title>") {
-			return Available
-		}
-	case Mastodon:
-		if strings.Contains(string(body), "<title>The page you are looking for") || strings.Contains(string(body), "<title>The page you were looking for") {
-			return Available
-		}
+		return Unavailable
 	}
 
-	return Unavailable
+	return Unknown
 }
